@@ -111,7 +111,6 @@ public class MainActivity extends Activity {
             }
         }
     }
-
     public void imprimirMatrizControl(){
         System.out.println();
         for (int row = 0; row < NUM_FILAS; row++) {
