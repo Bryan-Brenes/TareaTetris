@@ -3,6 +3,7 @@ package com.example.tetris;
 import android.app.Activity;
 import android.graphics.Color;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.support.v4.view.MotionEventCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -21,6 +22,7 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Random;
 
 public class MainActivity extends Activity implements GestureDetector.OnGestureListener {
@@ -30,10 +32,13 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
     GridLayout gridLayout;
     LinearLayout linearLayout;
     Chronometer chronometer;
+    TextView scoreTextView;
 
     public static final int NUM_COLUMNAS = 10;
     public static final int NUM_FILAS = 16;
     public static final int NUM_TOTAL_PIEZAS = 5;
+
+    int score;
 
     // para obtener las coordenadas del imageView en el grid se usa:
     // col = indice mod 10
@@ -41,9 +46,12 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
     ArrayList<Tile> listaImageViews;
     int[][] matrizControl = new int[NUM_FILAS][NUM_COLUMNAS];
     private ArrayList<Integer> indicesPiezaActiva;
+    private ArrayList<Integer> indicesPiezaViejos;
 
     private boolean colocarNuevaPieza;
     private int imagenActual;
+
+    boolean juegoActivo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,11 +67,13 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
         Log.e("test", String.format("Alto: %s, Ancho: %s",String.valueOf(height), String.valueOf(width)));*/
 
         gestureDetector = new GestureDetector(this, this);
+        score = 0;
 
 
         gridLayout = findViewById(R.id.tableroGrid);
         linearLayout = findViewById(R.id.infoLayout);
         chronometer = findViewById(R.id.chronometer);
+        scoreTextView = findViewById(R.id.scoreTextView);
         listaImageViews = new ArrayList<>();
 
         gridLayout.setColumnCount(10);
@@ -71,6 +81,7 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
 
         colocarNuevaPieza = true;
         indicesPiezaActiva = null;
+        juegoActivo = true;
 
         poblarTablero();
         imprimirMatrizControl();
@@ -147,6 +158,15 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
             if (colocarNuevaPieza){
                 indicesPiezaActiva = colocarPiezaAleatoria();
                 colocarNuevaPieza = false;
+                juegoActivo = !determinarSiPerdio();
+
+                if (!juegoActivo){
+                    // hacer animacion pare restablecer el juego
+                    resetTablero();
+                    System.out.println("reset Tablero");
+                    juegoActivo = true;
+                }
+
             } else {
                 //mover pieza, debe determinar si la posicion siguiente en válida
                 moverPieza(Direccion.ABAJO);
@@ -164,6 +184,58 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
             handler.postDelayed(this, 1000);
         }
     };
+
+    public void resetTablero(){
+        for (int row = 0; row < NUM_FILAS; row++){
+            for (int col = 0; col < NUM_COLUMNAS; col++){
+                int indice = getIndice(row, col);
+                Tile tile = listaImageViews.get(indice);
+                if (col == 0 || col == 9 || row == 15){
+                    tile.setEsObstaculo(true);
+                    tile.setImageResource(R.drawable.cuadrogris32);
+                    tile.setAlpha(1f);
+                    matrizControl[row][col] = 1;
+                } else {
+                    tile.setEsObstaculo(false);
+                    tile.setImageResource(R.drawable.cuadrogris32);
+                    tile.setAlpha(0.35f);
+                    matrizControl[row][col] = 0;
+                }
+            }
+        }
+        score = 0;
+        scoreTextView.setText("0000");
+        chronometer.setBase(SystemClock.elapsedRealtime());
+    }
+
+    public int getIndice(int row, int col){
+        int indice = NUM_COLUMNAS * row + col;
+        return indice;
+    }
+
+    public boolean determinarSiPerdio(){
+        /*boolean perdio = false;
+        for (Integer indice : indicesPiezaActiva){
+            if (listaImageViews.get(indice).getEsObstaculo() && indice < 19){
+                perdio = true;
+            }
+        }
+
+        return perdio;*/
+        boolean perdio = false;
+        for (int row = 0; row < 2; row++){
+            for (int col = 1; col < 9; col++){
+                int indice = getIndice(row, col);
+                Tile tile = listaImageViews.get(indice);
+                tile.setImageResource(R.drawable.cuadrorosado32);
+                tile.setAlpha(0.35f);
+                if (tile.getEsObstaculo()){
+                    perdio = true;
+                }
+            }
+        }
+        return perdio;
+    }
 
     public ArrayList<Integer> colocarPiezaAleatoria(){
 
@@ -210,11 +282,11 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
             // caso de pieza en L
             //Posible indices iniciales: 1 a 6
             case 4:
-                indiceInicial = rm.nextInt(6) + 1;
+                indiceInicial = rm.nextInt(5) + 1;
                 indicesPieza.add(indiceInicial);
                 indicesPieza.add(indiceInicial + 1);
                 indicesPieza.add(indiceInicial + 2);
-                indicesPieza.add(indiceInicial + 2 + 1);
+                indicesPieza.add(indiceInicial + 2 + 10);
 
                 break;
 
@@ -289,12 +361,22 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
                     tile.setImageResource(imagenActual);
                     nuevosIndices.add(indiceN);
                 }
+
+                indicesPiezaViejos = indicesPiezaActiva;
                 indicesPiezaActiva = nuevosIndices;
 
             } else {
                 for (Integer indice : indicesPiezaActiva){
                     Tile tile = listaImageViews.get(indice);
                     tile.setEsObstaculo(true);
+
+                    int col = indice % NUM_COLUMNAS;
+                    int row = indice / NUM_COLUMNAS;
+                    //System.out.println(String.format("ROW: %s, COL: %s", row, col));
+                    matrizControl[row][col] = 1;
+                    imprimirMatrizControl();
+                    verificarSiCompletoFila();
+
                 }
                 colocarNuevaPieza = true;
             }
@@ -324,6 +406,7 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
                     tile.setImageResource(imagenActual);
                     nuevosIndices.add(indiceN);
                 }
+                indicesPiezaViejos = indicesPiezaActiva;
                 indicesPiezaActiva = nuevosIndices;
 
             }
@@ -353,9 +436,169 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
                     tile.setImageResource(imagenActual);
                     nuevosIndices.add(indiceN);
                 }
+                indicesPiezaViejos = indicesPiezaActiva;
                 indicesPiezaActiva = nuevosIndices;
 
             }
+        }
+    }
+
+    public void desplazarhastaAbajo(){
+        boolean movimientoValido = true;
+
+        while (movimientoValido){
+            // Determinar si en una posicion mas abajo hay un obtaculo
+            // lo que se considera como un movimiento invalido
+            for (Integer indice : indicesPiezaActiva){
+                int indicePosicionSiguiente = indice + 10;
+                Tile tile = listaImageViews.get(indicePosicionSiguiente);
+                if (tile.getEsObstaculo()){
+                    movimientoValido = false;
+                }
+            }
+
+            //System.out.println(movimientoValido);
+            if (movimientoValido){
+
+                // se colocan grises las posiciones viejas
+                for (Integer indice : indicesPiezaActiva){
+                    Tile tile = listaImageViews.get(indice);
+                    tile.setAlpha(0.35f);
+                    tile.setImageResource(R.drawable.cuadrogris32);
+                }
+
+                ArrayList<Integer> nuevosIndices = new ArrayList<>();
+
+                for (Integer indice : indicesPiezaActiva){
+                    int indiceN = indice + 10;
+                    Tile tile = listaImageViews.get(indiceN);
+                    tile.setAlpha(1f);
+                    tile.setImageResource(imagenActual);
+                    nuevosIndices.add(indiceN);
+                }
+                indicesPiezaViejos = indicesPiezaActiva;
+                indicesPiezaActiva = nuevosIndices;
+
+            } else {
+                for (Integer indice : indicesPiezaActiva){
+                    Tile tile = listaImageViews.get(indice);
+                    tile.setEsObstaculo(true);
+                    int col = indice % NUM_COLUMNAS;
+                    int row = indice / NUM_COLUMNAS;
+                    //System.out.println(String.format("ROW: %s, COL: %s", row, col));
+                    matrizControl[row][col] = 1;
+                    imprimirMatrizControl();
+                    verificarSiCompletoFila();
+
+                }
+                colocarNuevaPieza = true;
+            }
+        }
+
+
+    }
+
+    public void verificarSiCompletoFila(){
+        ArrayList<Integer> indicesFilasCompletas = new ArrayList<>();
+        for (Integer pos : indicesPiezaActiva){
+            System.out.println(String.format("Pos: %s", pos));
+            int row = pos / NUM_COLUMNAS;
+            int sumaFila = 0;
+            for (int col = 0; col < NUM_COLUMNAS; col++){
+                sumaFila += matrizControl[row][col];
+            }
+            if (sumaFila == 10){
+                indicesFilasCompletas.add(row);
+                break;
+            }
+        }
+
+        if (indicesFilasCompletas.size() == 0){
+            return;
+        }
+
+        System.out.println(String.format("Indices de filas: %s", indicesFilasCompletas.size()));
+        for (Integer i : indicesFilasCompletas){
+            System.out.println(i);
+        }
+
+        score += indicesFilasCompletas.size()*100;
+        scoreTextView.setText(String.format("%04d", score));
+
+        // se quitan cmo obstaculos los elementos de las filas completadas
+        for (Integer row : indicesFilasCompletas){
+            for (int col = 1; col < 9; col++){
+                int indice = getIndice(row, col);
+                Tile tile = listaImageViews.get(indice);
+                tile.setAlpha(0.35f);
+                tile.setImageResource(R.drawable.cuadrogris32);
+                tile.setEsObstaculo(false);
+                matrizControl[row][col] = 0;
+            }
+        }
+
+        Collections.sort(indicesFilasCompletas);
+        int FilaMayor = indicesFilasCompletas.get(indicesFilasCompletas.size()-1);
+        //A partir de fila mayor para atrás se deben desplazar par abajo
+
+        for (int fila = FilaMayor; fila >= 0; fila--){
+            for (int col = 1; col < 9; col++){
+                int indice = getIndice(fila, col);
+                Tile tileActual = listaImageViews.get(indice);
+                if (tileActual.getEsObstaculo()){
+                    desplazarTileHaciaAbajo(indice, fila, col);
+                }
+            }
+        }
+
+
+
+    }
+
+    public void desplazarTileHaciaAbajo(int indice, int fila, int columna){
+
+        boolean movimientoValido = true;
+
+        while (movimientoValido){
+            // Determinar si en una posicion mas abajo hay un obtaculo
+            // lo que se considera como un movimiento invalido
+
+            int indicePosicionSiguiente = indice + 10;
+            Tile tileSig = listaImageViews.get(indicePosicionSiguiente);
+            if (tileSig.getEsObstaculo()){
+                movimientoValido = false;
+            }
+
+
+            //System.out.println(movimientoValido);
+            if (movimientoValido){
+
+                // se coloca en gris la posición vieja
+                Tile tile = listaImageViews.get(indice);
+                tile.setAlpha(0.35f);
+                tile.setEsObstaculo(false);
+                tile.setImageResource(R.drawable.cuadrogris32);
+                matrizControl[fila][columna] = 0;
+
+                Tile sig = listaImageViews.get(indice + 10);
+                sig.setAlpha(1f);
+                sig.setImageResource(R.drawable.cuadrorosado32);
+                sig.setEsObstaculo(true);
+                matrizControl[fila + 1][columna] = 1;
+
+                indice += 10;
+                fila += 1;
+
+            } /*else {
+
+                Tile tile = listaImageViews.get(indice);
+                tile.setEsObstaculo(true);
+                int col = indice % NUM_COLUMNAS;
+                int row = indice / NUM_COLUMNAS;
+                //System.out.println(String.format("ROW: %s, COL: %s", row, col));
+                matrizControl[row][col] = 1;
+
+            }*/
         }
     }
 
@@ -371,6 +614,7 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
 
     @Override
     public boolean onSingleTapUp(MotionEvent e) {
+        System.out.println("se le dio tap");
         return false;
     }
 
@@ -398,7 +642,8 @@ public class MainActivity extends Activity implements GestureDetector.OnGestureL
         }
         // movimiento swipe down
         if ((velocityY > 850 && velocityX < 300 && velocityX > -300) || velocityY > 2500){
-            moverPieza(Direccion.ABAJO);
+            desplazarhastaAbajo();
+            //moverPieza(Direccion.ABAJO);
         }
         return false;
     }
